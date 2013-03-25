@@ -16,8 +16,8 @@ outputs an buffer stream.
 ```javascript
 var slicepoint = require('slicepoint');
 
-// The first argument is a reqired string, it can be anything, in this example
-// \r\n needs will be converted to \n
+// slicepoint takes the same arguments as `String.prototype.slice` and works
+// the same way.
 var convert = slicepoint(3, -3);
 
 convert.write('Hallo');

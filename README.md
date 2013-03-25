@@ -1,6 +1,6 @@
 #slicepoint
 
-> Normalize or convert newlines
+> Slice a stream
 
 ## Installation
 

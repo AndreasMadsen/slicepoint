@@ -4,10 +4,11 @@ var stream = require('stream');
 
 var zeroBuffer = new Buffer(0);
 
-function Slicepoint(start, end) {
-  if (!(this instanceof Slicepoint)) return new Slicepoint(start, end);
+function Slicepoint(start, end, settings) {
+  if (!(this instanceof Slicepoint)) return new Slicepoint(start, end, settings);
 
-  stream.Transform.call(this);
+  stream.Transform.call(this, settings);
+  this._objectMode = !!(settings && settings.objectMode);
 
   // String.prototype.slice does type convertion of its inputs and
   // NaN becomes 0. Only if end is undefined is there a special case.
@@ -17,7 +18,8 @@ function Slicepoint(start, end) {
   // If the returned part is a tail part of a stream then we can't
   // know in advance if a chunk should be returned, so it is stored here
   // until it is known
-  this._tailBuffer = zeroBuffer;
+  this._tailBuffer = this._objectMode ? [] : zeroBuffer;
+
   this._tailPosition = 0;
   // - This is a negative number used in Buffer.prototype.slice
   this._tailSize = (this._end === null) ? Math.min(this._start, 0) : Math.min(this._start, this._end, 0);
@@ -58,7 +60,14 @@ function Slicepoint(start, end) {
 module.exports = Slicepoint;
 util.inherits(Slicepoint, stream.Transform);
 
+Slicepoint.prototype._pushArrayOrChunk = function (output) {
+  if (this._objectMode) output.forEach(function (item) { this.push(item); }, this);
+  else this.push(output);
+};
+
 Slicepoint.prototype._transform = function (chunk, encodeing, done) {
+  if (this._objectMode) chunk = [chunk];
+
   // Count the consumed data
   var consumed = this._consumed;
   this._consumed += chunk.length;
@@ -72,7 +81,9 @@ Slicepoint.prototype._transform = function (chunk, encodeing, done) {
   }
 
   // Add what was thought to be the tail to the begining of the incomming chunk
-  var output = Buffer.concat([this._tailBuffer, chunk]);
+  var output;
+  if (this._objectMode) output = this._tailBuffer.concat(chunk);
+  else output = Buffer.concat([this._tailBuffer, chunk]);
 
   // counting form the begining of the stream
   var headSliceStart = 0;
@@ -99,7 +110,7 @@ Slicepoint.prototype._transform = function (chunk, encodeing, done) {
     // - Slice the buffer now that `start` and `end` has been calculated
     output = output.slice(headSliceStart, headSliceEnd);
   }
-  
+
   // counting form the end of the stream
   if (this._sliceTail) {
     // Cut of the max tail from the output buffer
@@ -108,14 +119,14 @@ Slicepoint.prototype._transform = function (chunk, encodeing, done) {
 
     // Don't output data yet if the slice start is counting from the end
     if (this._start < 0) {
-      output = zeroBuffer;
+      output = this._objectMode ? [] : zeroBuffer;
     } else {
       output = output.slice(0, this._tailSize);
     }
   }
 
   // Send buffer to output
-  this.push(output);
+  this._pushArrayOrChunk(output);
   done(null);
 };
 
@@ -124,7 +135,7 @@ Slicepoint.prototype._flush = function (done) {
   if (this._neverOutput) {
     return done(null);
   }
-  
+
   // counting form the end of the stream
   if (this._sliceTail) {
     // - A part of the head should be removed
@@ -139,20 +150,22 @@ Slicepoint.prototype._flush = function (done) {
     if (this._end < 0) {
       tailSliceEnd = (this._consumed + this._end) - this._tailPosition;
     }
-    
+
     // Is begin after end?
     if (this._end > 0) {
       tailSliceEnd = this._end - this._tailPosition;
     }
-    
+
     // All slice values should now be postive, if they aren't it means
     // that they are before the tail (dude to a small stream) and they
     // should just be set to zero.
     if (tailSliceStart < 0) tailSliceStart = 0;
     if (tailSliceEnd < 0) tailSliceEnd = 0;
-    
+
     // - Slice the buffer now that `start` and `end` has been calculated
-    this.push(this._tailBuffer.slice(tailSliceStart, tailSliceEnd));
+    var output = this._tailBuffer.slice(tailSliceStart, tailSliceEnd);
+
+    this._pushArrayOrChunk(output);
     this._tailBuffer = null;
   }
 

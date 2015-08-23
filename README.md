@@ -10,15 +10,15 @@ npm install slicepoint
 
 ## Documentation
 
-`slicepoint` is a `Transform` stream there takes a buffer stream and
-outputs an buffer stream.
+`slicepoint` is a `Transform` stream there takes a buffer or object stream and
+outputs an buffer or object stream.
 
 ```javascript
 var slicepoint = require('slicepoint');
 
 // slicepoint takes the same arguments as `String.prototype.slice` and works
 // the same way.
-var convert = slicepoint(3, -3);
+var convert = slicepoint(3, -3, { objectMode: false });
 
 convert.write('Hallo');
 convert.write(' ');
